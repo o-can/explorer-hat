@@ -338,14 +338,14 @@ class Motor(object):
 
         # self.pwm_fw = GPIO.PWM(self.pin_fw, 100)
         # self.pwm_fw.start(0)
-        pi.set_PWM_range(self.pin_fw, 100)
         pi.set_PWM_frequency(self.pin_fw, 100)
+        pi.set_PWM_range(self.pin_fw, 100)
         pi.set_PWM_dutycycle(self.pin_fw, 0)
 
         # self.pwm_bw = GPIO.PWM(self.pin_bw, 100)
         # self.pwm_bw.start(0)
-        pi.set_PWM_range(self.pin_bw, 100)
         pi.set_PWM_frequency(self.pin_bw, 100)
+        pi.set_PWM_range(self.pin_bw, 100)
         pi.set_PWM_dutycycle(self.pin_bw, 0)
 
     def invert(self):
@@ -492,8 +492,8 @@ class Output(Pin):
 
         # self.gpio_pwm = GPIO.PWM(self.pin, PULSE_FREQUENCY)
         # self.gpio_pwm.start(0)
-        pi.set_PWM_range(self.pin, 100)
         pi.set_PWM_frequency(self.pin, 1000)
+        pi.set_PWM_range(self.pin, 100)
         pi.set_PWM_dutycycle(self.pin, 0)
         self.gpio_pwm = True
 
