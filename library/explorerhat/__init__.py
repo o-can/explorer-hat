@@ -15,10 +15,15 @@ except ImportError:
     elif version_info[0] == 3:
         raise ImportError("This library requires python3-smbus\nInstall with: sudo apt-get install python3-smbus")
 
+# try:
+# import RPi.GPIO as GPIO
+# except ImportError:
+# raise ImportError("This library requires the RPi.GPIO module\nInstall with: sudo pip install RPi.GPIO")
+
 try:
-    import RPi.GPIO as GPIO
+    import pigpio
 except ImportError:
-    raise ImportError("This library requires the RPi.GPIO module\nInstall with: sudo pip install RPi.GPIO")
+    raise ImportError("This library requires the pigpio module\nInstall with: sudo pip install pigpio")
 
 try:
     from cap1xxx import Cap1208
@@ -26,7 +31,6 @@ except ImportError:
     raise ImportError("This library requires the cap1xxx module\nInstall with: sudo pip install cap1xxx")
 
 from .pins import ObjectCollection, AsyncWorker, StoppableThread
-
 
 __version__ = '0.4.2'
 
@@ -75,13 +79,20 @@ DEBOUNCE_TIME = 20
 
 CAP_PRODUCT_ID = 107
 
+pi = pigpio.pi()
+# exit script if no connection
+if not pi.connected:
+    exit()
+
 
 def help(topic=None):
     return _help[topic]
 
+
 def set_verbose(value):
     global _verbose
     _verbose = value
+
 
 def explorerhat_exit():
     if _verbose: print("\nExplorer HAT exiting cleanly, please wait...")
@@ -92,33 +103,43 @@ def explorerhat_exit():
     light.stop()
     light.stop_pulse()
 
-    if _verbose: print("Stopping user tasks...")
+    if _verbose:
+        print("Stopping user tasks...")
     async_stop_all()
 
-    if _verbose: print("Cleaning up...")
-    GPIO.cleanup()
+    if _verbose:
+        print("Cleaning up...")
+    #    GPIO.cleanup()
+    pi.stop()
 
-    if _verbose: print("Goodbye!")
+    if _verbose:
+        print("Goodbye!")
+
 
 def setup():
     setup_gpio()
     setup_captouch()
     setup_analog()
 
+
 def setup_gpio(pin=None, mode=None, initial=0):
     global _gpio_is_setup
 
     if not _gpio_is_setup:
         _gpio_is_setup = True
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setwarnings(False)
+        # GPIO.setmode(GPIO.BCM)
+        # GPIO.setwarnings(False)
         atexit.register(explorerhat_exit)
 
     if pin is not None and mode is not None:
-        if mode == GPIO.OUT:
-            GPIO.setup(pin, mode, initial=initial)
+        if mode == pigpio.OUTPUT:
+            pi.set_mode(pin, mode)
+            pi.write(initial)
+        # GPIO.setup(pin, mode, initial=initial)
         else:
-            GPIO.setup(pin, mode)
+            # GPIO.setup(pin, mode)
+            pi.set_mode(pin, mode)
+
 
 def setup_captouch():
     global _captouch_is_setup, has_captouch, _cap1208
@@ -136,6 +157,7 @@ def setup_captouch():
 
     return has_captouch
 
+
 def setup_analog():
     global _analog_is_setup, adc_available, read_se_adc, has_analog
 
@@ -144,7 +166,7 @@ def setup_analog():
 
     _analog_is_setup = True
 
-    from .ads1015 import read_se_adc, adc_available 
+    from .ads1015 import read_se_adc, adc_available
 
     if adc_available:
         has_analog = True
@@ -153,15 +175,18 @@ def setup_analog():
 
     return has_analog
 
+
 def is_explorer_pro():
     setup_analog()
     setup_captouch()
     return has_captouch and has_analog
 
+
 def is_explorer_basic():
     setup_analog()
     setup_captouch()
     return has_captouch and not has_analog
+
 
 def is_explorer_phat():
     setup_analog()
@@ -174,6 +199,7 @@ class Pulse(StoppableThread):
 
     Pulses an LED in perfect wall-clock time
     Small delay by 1.0/FPS to prevent unnecessary workload"""
+
     def __init__(self, pin, time_on, time_off, transition_on, transition_off):
         StoppableThread.__init__(self)
 
@@ -208,7 +234,7 @@ class Pulse(StoppableThread):
         while not self.stop_event.is_set():
             if not self._paused:
                 current_time = time.time() - self.time_start
-                delta = current_time % (self.transition_on+self.time_on+self.transition_off+self.time_off)
+                delta = current_time % (self.transition_on + self.time_on + self.transition_off + self.time_off)
 
                 time_off = self.transition_on + self.time_on + self.transition_off
                 time_on = self.transition_on + self.time_on
@@ -228,7 +254,7 @@ class Pulse(StoppableThread):
                 elif delta > time_off:
                     self.pin.duty_cycle(0)
 
-            time.sleep(1.0/self.fps)
+            time.sleep(1.0 / self.fps)
 
         self.pin.duty_cycle(0)
 
@@ -239,10 +265,10 @@ class Pin(object):
     Pin contains methods that apply to both inputs and outputs"""
     type = 'Pin'
 
-    def __init__(self, pin, mode=GPIO.IN):
+    def __init__(self, pin, mode=pigpio.INPUT):
         self.pin = pin
         self.mode = mode
-        self.last = GPIO.LOW
+        self.last = pigpio.LOW
         self.handle_change = False
         self.handle_high = False
         self.handle_low = False
@@ -273,7 +299,7 @@ class Pin(object):
 
     def read(self):
         self._setup_gpio()
-        return GPIO.input(self.pin)
+        return pi.read(self.pin)
 
     def stop(self):
         return True
@@ -307,14 +333,20 @@ class Motor(object):
             return
 
         self._gpio_is_setup = True
-        setup_gpio(self.pin_fw, GPIO.OUT, initial=GPIO.LOW)
-        setup_gpio(self.pin_bw, GPIO.OUT, initial=GPIO.LOW)
+        setup_gpio(self.pin_fw, pigpio.OUTPUT, initial=pigpio.LOW)
+        setup_gpio(self.pin_bw, pigpio.OUTPUT, initial=pigpio.LOW)
 
-        self.pwm_fw = GPIO.PWM(self.pin_fw, 100)
-        self.pwm_fw.start(0)
+        # self.pwm_fw = GPIO.PWM(self.pin_fw, 100)
+        # self.pwm_fw.start(0)
+        pi.set_PWM_range(self.pin_fw, 100)
+        pi.set_PWM_frequency(self.pin_fw, 100)
+        pi.set_PWM_dutycycle(self.pin_fw, 0)
 
-        self.pwm_bw = GPIO.PWM(self.pin_bw, 100)
-        self.pwm_bw.start(0)
+        # self.pwm_bw = GPIO.PWM(self.pin_bw, 100)
+        # self.pwm_bw.start(0)
+        pi.set_PWM_range(self.pin_bw, 100)
+        pi.set_PWM_frequency(self.pin_bw, 100)
+        pi.set_PWM_dutycycle(self.pin_bw, 0)
 
     def invert(self):
         self._invert = not self._invert
@@ -346,14 +378,20 @@ class Motor(object):
 
         self._speed = speed
         if speed > 0:
-            self.pwm_bw.ChangeDutyCycle(0)
-            self.pwm_fw.ChangeDutyCycle(speed)
+            # self.pwm_bw.ChangeDutyCycle(0)
+            # self.pwm_fw.ChangeDutyCycle(speed)
+            pi.set_PWM_dutycycle(self.pin_bw, 0)
+            pi.set_PWM_dutycycle(self.pin_fw, speed)
         if speed < 0:
-            self.pwm_fw.ChangeDutyCycle(0)
-            self.pwm_bw.ChangeDutyCycle(abs(speed))
+            # self.pwm_fw.ChangeDutyCycle(0)
+            # self.pwm_bw.ChangeDutyCycle(abs(speed))
+            pi.set_PWM_dutycycle(self.pin_fw, 0)
+            pi.set_PWM_dutycycle(self.pin_bw, abs(speed))
         if speed == 0:
-            self.pwm_fw.ChangeDutyCycle(0)
-            self.pwm_bw.ChangeDutyCycle(0)
+            # self.pwm_fw.ChangeDutyCycle(0)
+            # self.pwm_bw.ChangeDutyCycle(0)
+            pi.set_PWM_dutycycle(self.pin_fw, 0)
+            pi.set_PWM_dutycycle(self.pin_bw, 0)
 
         return speed
 
@@ -377,8 +415,9 @@ class Input(Pin):
         self.handle_released = None
         self.handle_changed = None
         self.has_callback = False
+        self.callback = None
 
-        super(Input, self).__init__(pin, GPIO.IN)
+        super(Input, self).__init__(pin, pigpio.INPUT)
 
     def on_high(self, callback, bouncetime=DEBOUNCE_TIME):
         self.handle_pressed = callback
@@ -398,7 +437,8 @@ class Input(Pin):
                 self.handle_changed(self)
 
         self._setup_gpio()
-        GPIO.add_event_detect(self.pin, GPIO.BOTH, callback=handle_callback, bouncetime=bouncetime)
+        # GPIO.add_event_detect(self.pin, GPIO.BOTH, callback=handle_callback, bouncetime=bouncetime)
+        self.callback = pi.callback(self.pin, pigpio.EITHER_EDGE, func=handle_callback)
         self.has_callback = True
         return True
 
@@ -413,8 +453,11 @@ class Input(Pin):
         return True
 
     def clear_events(self):
-        if self._is_gpio_setup():
-            GPIO.remove_event_detect(self.pin)
+        if self._is_gpio_setup:
+            # GPIO.remove_event_detect(self.pin)
+            if self.has_callback:
+                self.callback.cancel()
+                self.callback = None
         self.has_callback = False
 
     # Alias handlers
@@ -431,7 +474,7 @@ class Output(Pin):
     type = 'Output'
 
     def __init__(self, pin):
-        super(Output, self).__init__(pin, GPIO.OUT)
+        super(Output, self).__init__(pin, pigpio.OUTPUT)
 
         self.pulser = Pulse(self, 0, 0, 0, 0)
         self.blinking = False
@@ -439,19 +482,24 @@ class Output(Pin):
         self.fading = False
         self.fader = None
         self._value = 0
-        self.gpio_pwm = None
+        self.gpio_pwm = False
 
     def _setup_gpio(self):
         if self._is_gpio_setup:
             return True
 
         setup_gpio(self.pin, self.mode)
-        self.gpio_pwm = GPIO.PWM(self.pin, PULSE_FREQUENCY)
-        self.gpio_pwm.start(0)
+
+        # self.gpio_pwm = GPIO.PWM(self.pin, PULSE_FREQUENCY)
+        # self.gpio_pwm.start(0)
+        pi.set_PWM_range(self.pin, 100)
+        pi.set_PWM_frequency(self.pin, 1000)
+        pi.set_PWM_dutycycle(self.pin, 0)
+        self.gpio_pwm = True
 
     def __del__(self):
-        if self.gpio_pwm is not None:
-            self.gpio_pwm.stop()
+        if self.gpio_pwm:
+            pi.set_PWM_dutycycle(self.pin, 0)
         Pin.__del__(self)
 
     def fade(self, start, end, duration):
@@ -474,7 +522,7 @@ class Output(Pin):
                 return False
 
             current = (time.time() - time_start) / duration
-            brightness = start + (float(end-start) * current)
+            brightness = start + (float(end - start) * current)
             self.duty_cycle(round(brightness))
             time.sleep(1.0 / PULSE_FPS)
 
@@ -499,10 +547,10 @@ class Output(Pin):
 
         total = off + on
 
-        duty_cycle = 100.0 * (on/total)
+        duty_cycle = 100.0 * (on / total)
 
         # Use pure PWM blinking, because threads are ugly
-        self.frequency(1.0/total)
+        self.frequency(1.0 / total)
         self.duty_cycle(duty_cycle)
         self.blinking = True
 
@@ -552,16 +600,20 @@ class Output(Pin):
         return True
 
     def pwm(self, freq, duty_cycle=50):
-        self.gpio_pwm.ChangeDutyCycle(duty_cycle)
-        self.gpio_pwm.ChangeFrequency(freq)
+        # self.gpio_pwm.ChangeDutyCycle(duty_cycle)
+        # self.gpio_pwm.ChangeFrequency(freq)
+        pi.set_PWM_dutycycle(self.pin, duty_cycle)
+        pi.set_PWM_frequency(self.pin, freq)
         return True
 
     def frequency(self, freq):
-        self.gpio_pwm.ChangeFrequency(freq)
+        # self.gpio_pwm.ChangeFrequency(freq)
+        pi.set_PWM_frequency(self.pin, freq)
         return True
 
     def duty_cycle(self, duty_cycle):
-        self.gpio_pwm.ChangeDutyCycle(duty_cycle)
+        # self.gpio_pwm.ChangeDutyCycle(duty_cycle)
+        pi.set_PWM_dutycycle(self.pin, duty_cycle)
         return True
 
     def stop(self):
@@ -680,7 +732,7 @@ class AnalogInput(object):
 
     def _watch(self):
         value = self.read()
-        if self.last_value is not None and abs(value-self.last_value) > self._sensitivity:
+        if self.last_value is not None and abs(value - self.last_value) > self._sensitivity:
             if callable(self._handler):
                 self._handler(self, value)
         self.last_value = value
@@ -760,6 +812,7 @@ class CapTouchInput(object):
 
         self.handlers['held'] = handler
 
+
 running = False
 workers = {}
 
@@ -770,10 +823,12 @@ def async_start(name, function):
     workers[name].start()
     return True
 
+
 def async_stop(name):
     global workers
     workers[name].stop()
     return True
+
 
 def async_stop_all():
     global workers
@@ -782,23 +837,28 @@ def async_stop_all():
         workers[worker].stop()
     return True
 
+
 def set_timeout(function, seconds):
     def fn_timeout():
         time.sleep(seconds)
         function()
         return False
+
     timeout = AsyncWorker(fn_timeout)
     timeout.start()
     return True
 
+
 def pause():
     signal.pause()
+
 
 def loop(callback):
     global running
     running = True
     while running:
         callback()
+
 
 def stop():
     global running
@@ -876,7 +936,7 @@ Or just one thing, like so:
 
     explorerhat.light.red.on()
 ''',
-    'touch':  '''Touch Inputs
+    'touch': '''Touch Inputs
 
 Explorer HAT includes 8 touch inputs which act just like buttons.
 
@@ -887,7 +947,7 @@ The 8 touch pads are named "one" to "eight" and can be called like so:
     ...
     explorerhat.touch.eight
 ''',
-    'input':  '''Inputs
+    'input': '''Inputs
 
 Explorer HAT includes 4 buffered, 5v tolerant inputs.
 
@@ -910,7 +970,7 @@ The 4 outputs are named "one" to "four" and can be called like so:
     ...
     explorerhat.output.four
 ''',
-    'light':  '''Lights
+    'light': '''Lights
 
 Explorer HAT includs 4 LEDs; Yellow, Blue, Red and Green
 
@@ -931,7 +991,7 @@ The 4 analog inputs are named "one" to "four" and can be called like so:
     ...
     explorerhat.analog.four
 ''',
-    'motor':  '''Motor Driver
+    'motor': '''Motor Driver
 
 Explorer HAT includes a motor driver, capable of driving two motors.
 
@@ -945,7 +1005,7 @@ The two motors are named "one" and "two" and can be called like so:
 
 def help(topic='index'):
     if topic.lower() in _help.keys():
-        print("HELP{}\n\n{}\n{}".format('-'*66, _help[topic.lower()], '-'*70))
+        print("HELP{}\n\n{}\n{}".format('-' * 66, _help[topic.lower()], '-' * 70))
     else:
         print(_help['index'])
     return None
