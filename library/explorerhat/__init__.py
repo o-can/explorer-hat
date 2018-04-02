@@ -109,7 +109,7 @@ def explorerhat_exit():
 
     if _verbose:
         print("Cleaning up...")
-    #    GPIO.cleanup()
+    #   GPIO.cleanup()
     pi.stop()
 
     if _verbose:
@@ -498,8 +498,6 @@ class Output(Pin):
         self.gpio_pwm = True
 
     def __del__(self):
-        if self.gpio_pwm:
-            pi.set_PWM_dutycycle(self.pin, 0)
         Pin.__del__(self)
 
     def fade(self, start, end, duration):
