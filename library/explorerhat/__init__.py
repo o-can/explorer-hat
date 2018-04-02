@@ -134,7 +134,7 @@ def setup_gpio(pin=None, mode=None, initial=0):
     if pin is not None and mode is not None:
         if mode == pigpio.OUTPUT:
             pi.set_mode(pin, mode)
-            pi.write(initial)
+            pi.write(pin, initial)
         # GPIO.setup(pin, mode, initial=initial)
         else:
             # GPIO.setup(pin, mode)
