@@ -424,11 +424,11 @@ class Input(Pin):
         self._setup_callback(bouncetime)
         return True
 
-    def _setup_callback(self, bouncetime):
+    def _setup_callback(self, bouncetime=DEBOUNCE_TIME):
         if self.has_callback:
             return False
 
-        def handle_callback(pin):
+        def handle_callback(pin, new_level, tick):
             if self.read() == 1 and callable(self.handle_pressed):
                 self.handle_pressed(self)
             elif self.read() == 0 and callable(self.handle_released):
