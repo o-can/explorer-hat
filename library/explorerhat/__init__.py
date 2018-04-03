@@ -434,7 +434,7 @@ class Input(Pin):
             elif self.read() == 0 and callable(self.handle_released):
                 self.handle_released(self)
             if callable(self.handle_changed):
-                self.handle_changed(self, new_level)
+                self.handle_changed(self, new_level, tick)
 
         self._setup_gpio()
         # GPIO.add_event_detect(self.pin, GPIO.BOTH, callback=handle_callback, bouncetime=bouncetime)
